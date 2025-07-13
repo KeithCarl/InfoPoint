@@ -1,28 +1,41 @@
 {
-  "name": "piosk",
-  "version": "0.1.0",
-  "description": "One-shot set up Raspberry Pi in kiosk mode as a webpage shuffler, with a web interface for management.",
+  "name": "infopoint",
+  "version": "2.0.0",
+  "description": "InfoPoint - Raspberry Pi Kiosk Mode URL Switcher with Advanced Timeout Support",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+ssh://git@github.com/debloper/piosk.git"
+    "start": "node index.js",
+    "dev": "node index.js",
+    "install-system": "sudo scripts/setup.sh",
+    "uninstall-system": "sudo scripts/cleanup.sh"
   },
   "keywords": [
-    "piosk",
-    "kiosk mode",
-    "raspberry pi",
-    "wayfire autostart"
+    "raspberry-pi",
+    "kiosk",
+    "digital-signage",
+    "url-switcher",
+    "timeout",
+    "chromium",
+    "display",
+    "dashboard"
   ],
-  "author": "Soumya Deb <debloper@gmail.com>",
-  "license": "MPL-2.0",
-  "bugs": {
-    "url": "https://github.com/debloper/piosk/issues"
+  "author": "Keith Carl",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KeithCarl/InfoPoint.git"
   },
-  "homepage": "https://github.com/debloper/piosk#readme",
   "dependencies": {
-    "express": "^5.0.0-beta.3"
-  }
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm",
+    "arm64"
+  ]
 }

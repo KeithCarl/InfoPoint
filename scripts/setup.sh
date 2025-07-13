@@ -1,96 +1,381 @@
 #!/bin/bash
+
+# InfoPoint Setup Script
+# One-shot setup for Raspberry Pi kiosk mode with timeout support
+
 set -e
 
-# Installation directory
-PIOSK_DIR="/opt/piosk"
+# Configuration
+INFOPOINT_DIR="/opt/infopoint"
+SERVICE_NAME="infopoint"
+USER="pi"
+NODEJS_VERSION="18"
 
-RESET='\033[0m'      # Reset to default
-ERROR='\033[1;31m'   # Bold Red
-SUCCESS='\033[1;32m' # Bold Green
-WARNING='\033[1;33m' # Bold Yellow
-INFO='\033[1;34m'    # Bold Blue
-CALLOUT='\033[1;35m' # Bold Magenta
-DEBUG='\033[1;36m'   # Bold Cyan
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-echo -e "${INFO}Checking superuser privileges...${RESET}"
-if [ "$EUID" -ne 0 ]; then
-  echo -e "${DEBUG}Escalating privileges as superuser...${RESET}"
+# Logging function
+log() {
+    echo -e "${BLUE}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
 
-  sudo "$0" "$@" # Re-execute the script as superuser
-  exit $?  # Exit with the status of the sudo command
+success() {
+    echo -e "${GREEN}[$(date '+%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+warn() {
+    echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+}
+
+error() {
+    echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
+}
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+    error "This script must be run as root (use sudo)"
+    exit 1
 fi
 
-echo -e "${INFO}Configuring autologin...${RESET}"
-if grep -q "autologin" "/etc/systemd/system/getty@tty1.service.d/autologin.conf" 2>/dev/null; then
-  echo -e "${SUCCESS}\tautologin is already enabled!${RESET}."
-else
-  if command -v raspi-config >/dev/null 2>&1; then
-    echo -e "${DEBUG}Enabling autologin using raspi-config...${RESET}"
-    raspi-config nonint do_boot_behaviour B4
-  else
-    echo -e "${ERROR}Could not enable autologin${RESET}"
-    echo -e "${ERROR}Please configure autologin manually and rerun setup.${RESET}"
-  fi
-  echo -e "${SUCCESS}\tautologin has been enabled!${RESET}"
+# Check if running on Raspberry Pi
+if ! grep -q "Raspberry Pi" /proc/device-tree/model 2>/dev/null; then
+    warn "This script is designed for Raspberry Pi, but will attempt to continue"
 fi
 
-echo -e "${INFO}Installing dependencies...${RESET}"
-apt install -y git jq wtype nodejs npm
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-echo -e "${INFO}Cloning repository...${RESET}"
-git clone https://github.com/debloper/piosk.git "$PIOSK_DIR"
-cd "$PIOSK_DIR"
-
-# echo -e "${INFO}Checking out latest release...${RESET}"
-# git checkout devel
-# git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
-
-echo -e "${INFO}Installing npm dependencies...${RESET}"
-npm i
-
-echo -e "${INFO}Restoring configurations...${RESET}"
-if [ ! -f /opt/piosk/config.json ]; then
-    if [ -f /opt/piosk.config.bak ]; then
-        mv /opt/piosk.config.bak /opt/piosk/config.json
-    else
-        mv config.json.sample config.json
+# Function to get IP address
+get_ip_address() {
+    local ip=$(hostname -I | awk '{print $1}')
+    if [[ -z "$ip" ]]; then
+        ip=$(ip route get 8.8.8.8 | awk '{print $7; exit}' 2>/dev/null)
     fi
-fi
+    echo "$ip"
+}
 
-echo -e "${INFO}Installing PiOSK services...${RESET}"
-PI_USER="$SUDO_USER"
-PI_SUID=$(id -u "$SUDO_USER")
-PI_HOME=$(eval echo ~"$SUDO_USER")
+# Function to install Node.js
+install_nodejs() {
+    log "Installing Node.js $NODEJS_VERSION..."
+    
+    if command_exists node; then
+        local current_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+        if [[ "$current_version" -ge "$NODEJS_VERSION" ]]; then
+            success "Node.js $current_version is already installed"
+            return
+        fi
+    fi
+    
+    # Install Node.js using NodeSource repository
+    curl -fsSL https://deb.nodesource.com/setup_${NODEJS_VERSION}.x | bash -
+    apt-get install -y nodejs
+    
+    success "Node.js $(node -v) installed successfully"
+}
 
-sed -e "s|PI_HOME|$PI_HOME|g" \
-    -e "s|PI_SUID|$PI_SUID|g" \
-    -e "s|PI_USER|$PI_USER|g" \
-    "$PIOSK_DIR/services/piosk-runner.template" > "/etc/systemd/system/piosk-runner.service"
+# Function to install system dependencies
+install_dependencies() {
+    log "Updating package list..."
+    apt-get update
+    
+    log "Installing system dependencies..."
+    apt-get install -y \
+        chromium-browser \
+        wmctrl \
+        wtype \
+        jq \
+        git \
+        curl \
+        unzip \
+        xdotool \
+        x11-xserver-utils \
+        matchbox-window-manager \
+        xautomation \
+        unclutter-xfixes
+    
+    success "System dependencies installed"
+}
 
-sed -e "s|PI_HOME|$PI_HOME|g" \
-    -e "s|PI_SUID|$PI_SUID|g" \
-    -e "s|PI_USER|$PI_USER|g" \
-    "$PIOSK_DIR/services/piosk-switcher.template" > "/etc/systemd/system/piosk-switcher.service"
+# Function to create InfoPoint directory structure
+create_directories() {
+    log "Creating InfoPoint directory structure..."
+    
+    mkdir -p "$INFOPOINT_DIR"/{scripts,config,logs,public}
+    chown -R "$USER:$USER" "$INFOPOINT_DIR"
+    
+    success "Directory structure created"
+}
 
-cp "$PIOSK_DIR/services/piosk-dashboard.template" /etc/systemd/system/piosk-dashboard.service
+# Function to create InfoPoint service files
+create_service_files() {
+    log "Creating systemd service files..."
+    
+    # Create InfoPoint dashboard service
+    cat > "/etc/systemd/system/${SERVICE_NAME}.service" << EOF
+[Unit]
+Description=InfoPoint Dashboard Service
+After=network.target
+Wants=network.target
 
-echo -e "${INFO}Reloading systemd daemons...${RESET}"
-systemctl daemon-reload
+[Service]
+Type=simple
+User=$USER
+Group=$USER
+WorkingDirectory=$INFOPOINT_DIR
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=infopoint-dashboard
 
-echo -e "${INFO}Enabling PiOSK daemons...${RESET}"
-systemctl enable piosk-runner
-systemctl enable piosk-switcher
-systemctl enable piosk-dashboard
+[Install]
+WantedBy=multi-user.target
+EOF
 
-echo -e "${INFO}Starting PiOSK daemons...${RESET}"
-# The runner and switcher services are meant to be started after reboot
-# systemctl start piosk-runner
-# systemctl start piosk-switcher
-systemctl start piosk-dashboard
+    # Create InfoPoint kiosk service
+    cat > "/etc/systemd/system/${SERVICE_NAME}-kiosk.service" << EOF
+[Unit]
+Description=InfoPoint Kiosk Mode
+After=graphical-session.target
+Wants=graphical-session.target
 
-echo -e "${CALLOUT}\nPiOSK is now installed.${RESET}"
-echo -e "Visit either of these links to access PiOSK dashboard:"
-echo -e "\t- ${INFO}\033[0;32mhttp://$(hostname)/${RESET} or,"
-echo -e "\t- ${INFO}http://$(hostname -I | cut -d " " -f1)/${RESET}"
-echo -e "Configure links to shuffle; then apply changes to reboot."
-echo -e "${WARNING}\033[0;31mThe kiosk mode will launch on next startup.${RESET}"
+[Service]
+Type=simple
+User=$USER
+Group=$USER
+WorkingDirectory=$INFOPOINT_DIR
+Environment=DISPLAY=:0
+ExecStart=$INFOPOINT_DIR/scripts/runner.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=infopoint-kiosk
+
+[Install]
+WantedBy=graphical-session.target
+EOF
+
+    success "Service files created"
+}
+
+# Function to create runner script
+create_runner_script() {
+    log "Creating runner script..."
+    
+    cat > "$INFOPOINT_DIR/scripts/runner.sh" << 'EOF'
+#!/bin/bash
+
+# InfoPoint Kiosk Runner Script
+# Starts the kiosk mode environment and URL switcher
+
+export DISPLAY=:0
+cd /opt/infopoint
+
+# Wait for X server to be ready
+while ! xdpyinfo >/dev/null 2>&1; do
+    echo "Waiting for X server..."
+    sleep 2
+done
+
+# Hide cursor
+unclutter -idle 0.5 -root &
+
+# Disable screen saver and power management
+xset s off
+xset s noblank
+xset -dpms
+
+# Set desktop background to black
+xsetroot -solid black
+
+# Start window manager
+matchbox-window-manager -use_titlebar no &
+
+# Wait a moment for window manager to start
+sleep 2
+
+# Start the URL switcher
+./scripts/switcher.sh
+EOF
+
+    chmod +x "$INFOPOINT_DIR/scripts/runner.sh"
+    success "Runner script created"
+}
+
+# Function to create package.json
+create_package_json() {
+    log "Creating package.json..."
+    
+    cat > "$INFOPOINT_DIR/package.json" << EOF
+{
+  "name": "infopoint",
+  "version": "2.0.0",
+  "description": "InfoPoint - Raspberry Pi Kiosk Mode URL Switcher with Timeout Support",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "raspberry-pi",
+    "kiosk",
+    "digital-signage",
+    "url-switcher",
+    "timeout"
+  ],
+  "author": "Keith Carl",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+EOF
+
+    success "Package.json created"
+}
+
+# Function to install Node.js dependencies
+install_node_dependencies() {
+    log "Installing Node.js dependencies..."
+    
+    cd "$INFOPOINT_DIR"
+    sudo -u "$USER" npm install
+    
+    success "Node.js dependencies installed"
+}
+
+# Function to backup existing configuration
+backup_existing_config() {
+    if [[ -f "$INFOPOINT_DIR/config/urls.json" ]]; then
+        log "Backing up existing configuration..."
+        cp "$INFOPOINT_DIR/config/urls.json" "$INFOPOINT_DIR/config/urls.json.backup.$(date +%Y%m%d_%H%M%S)"
+        success "Configuration backed up"
+    fi
+}
+
+# Function to enable auto-login
+enable_auto_login() {
+    log "Configuring auto-login..."
+    
+    # Enable auto-login for the pi user
+    raspi-config nonint do_boot_behaviour B4
+    
+    success "Auto-login configured"
+}
+
+# Function to configure boot behavior
+configure_boot_behavior() {
+    log "Configuring boot behavior..."
+    
+    # Add InfoPoint kiosk service to auto-start
+    systemctl enable "${SERVICE_NAME}-kiosk.service"
+    
+    # Create autostart directory for the user
+    mkdir -p "/home/$USER/.config/autostart"
+    
+    # Create desktop entry to start InfoPoint on login
+    cat > "/home/$USER/.config/autostart/infopoint.desktop" << EOF
+[Desktop Entry]
+Type=Application
+Name=InfoPoint Kiosk
+Exec=systemctl --user start ${SERVICE_NAME}-kiosk
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+    chown "$USER:$USER" "/home/$USER/.config/autostart/infopoint.desktop"
+    
+    success "Boot behavior configured"
+}
+
+# Function to start services
+start_services() {
+    log "Starting InfoPoint services..."
+    
+    systemctl daemon-reload
+    systemctl enable "$SERVICE_NAME.service"
+    systemctl start "$SERVICE_NAME.service"
+    
+    success "Services started"
+}
+
+# Function to display completion message
+display_completion() {
+    local ip_address=$(get_ip_address)
+    local hostname=$(hostname)
+    
+    echo
+    success "============================================"
+    success "InfoPoint installation completed successfully!"
+    success "============================================"
+    echo
+    success "Dashboard URLs:"
+    success "  http://$ip_address/"
+    success "  http://$hostname.local/"
+    echo
+    success "Configuration:"
+    success "  Config file: $INFOPOINT_DIR/config/urls.json"
+    success "  Logs: $INFOPOINT_DIR/logs/"
+    success "  Service: systemctl status $SERVICE_NAME"
+    echo
+    success "Next steps:"
+    success "1. Access the dashboard using the URLs above"
+    success "2. Configure your URLs and timeouts"
+    success "3. Click 'APPLY & RESTART' to start kiosk mode"
+    echo
+    success "For kiosk mode, reboot the system:"
+    success "  sudo reboot"
+    echo
+}
+
+# Main installation function
+main() {
+    log "Starting InfoPoint installation..."
+    
+    # Check prerequisites
+    if ! command_exists curl; then
+        error "curl is required but not installed"
+        exit 1
+    fi
+    
+    # Backup existing config if it exists
+    backup_existing_config
+    
+    # Install dependencies
+    install_dependencies
+    install_nodejs
+    
+    # Create directory structure
+    create_directories
+    
+    # Create application files
+    create_package_json
+    install_node_dependencies
+    create_service_files
+    create_runner_script
+    
+    # Configure system
+    enable_auto_login
+    configure_boot_behavior
+    start_services
+    
+    # Display completion message
+    display_completion
+    
+    success "InfoPoint installation completed!"
+}
+
+# Handle script interruption
+trap 'error "Installation interrupted"; exit 1' INT TERM
+
+# Run main installation
+main "$@"

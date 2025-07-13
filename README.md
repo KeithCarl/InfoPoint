@@ -1,126 +1,245 @@
-![PiOSK Banner](assets/banner.png)
-**One-shot set up Raspberry Pi in kiosk mode as a webpage shuffler, with a web interface for management.**
+# InfoPoint
 
-# 0. Foreword
+One-shot setup for Raspberry Pi in kiosk mode as a webpage shuffler with advanced timeout management and a web interface for configuration.
 
-This started as a simple automation script &mdash; a wrapper of the [official Raspberry Pi kiosk mode tutorial](https://www.raspberrypi.com/tutorials/how-to-use-a-raspberry-pi-in-kiosk-mode/) for personal use. Then one thing lead to the other and I found myself installing nodejs & writing systemd unit files...
+## ✨ New Features
 
-That's when I realized... maybe there are other people (or future me) who'd also find this "single script setup" useful.
+### 🕐 Advanced Timeout Management
+- **Individual URL Timeouts**: Set custom display duration for each URL
+- **Global Timeout Settings**: Set a default timeout for all URLs
+- **Transition Delays**: Add customizable delays between page transitions
+- **Real-time Configuration**: Change timeouts without restarting the system
 
-> [!NOTE]  
-> And apparently, I wasn't wrong! From GitHub [stars](https://github.com/debloper/piosk/stargazers), [issue](https://github.com/debloper/piosk/issues) reports, to [news articles](https://www.hackster.io/news/fe890d007c32) covering PiOSK - the community acceptance has been far more than I had imagined. So, with the wide range of users, there's a need for stabilizing the repo and consolidating the features. The followup updates will be less frequent, and more thoroughly tested. It's not a feature freeze, but priority would be on the refactor and maintenance.
+### 🎨 Enhanced Dashboard
+- **Modern UI**: Clean, responsive web interface
+- **URL Management**: Add, remove, and reorder URLs with ease
+- **Display Names**: Assign friendly names to your URLs
+- **Live Configuration**: See current settings and modify them instantly
 
+### 🔧 Improved Reliability
+- **Better Error Handling**: Graceful handling of network issues and invalid URLs
+- **Process Management**: Robust Chromium process management
+- **Logging**: Comprehensive logging for troubleshooting
+- **Configuration Backup**: Automatic backup of settings
 
-# 1. Set Up Guide
+## 🚀 Quick Start
 
-[![PiOSK Setup Video Walkthrough](https://img.youtube.com/vi/CrQjc6P-g1A/maxresdefault.jpg)](https://youtu.be/CrQjc6P-g1A)
+### Prerequisites
+- Raspberry Pi (Pi 4 or Pi 5 recommended)
+- Raspberry Pi OS with desktop
+- Internet connection
+- Desktop auto-login enabled (default on RPi OS)
 
-***PiOSK Setup Video Walkthrough***
+### Installation
 
-> [!IMPORTANT]  
-> PiOSK ***[assumes](#21-assumptions)*** a few things to keep itself lean and just focuses on the essentials. It should still work even if some of those assumptions aren't met, but it may require some tinkering & manual overrides. Issue reports or fixes for those edge cases are appreciated & welcome!
-
-
-## 1.1 Preparation
-
-0. Boot into Raspberry Pi desktop[^1]
-1. Ensure username, hostname etc. are configured
-2. Check ethernet/WiFi works & has internet access
-3. Enable [desktop auto login](https://www.raspberrypi.com/documentation/computers/configuration.html#boot-options) (set by default on RPi OS)
-
-[^1]: That is to say... boot into `runlevel 5` or `graphical.target` and not in console mode &mdash; it's **NOT** a recommendation to use the 3.4GB boot image named [Raspberry Pi OS Desktop](https://www.raspberrypi.com/software/operating-systems/#raspberry-pi-desktop)
-
-> [!NOTE]  
-> Check [recommendations section](#22-recommendations) for more detailed explanations.
-
-
-## 1.2 Installation
-
-Either open terminal on the Raspberry Pi's desktop environment, or remote login to it; and run the following command:
+1. **Boot into Raspberry Pi desktop**
+2. **Ensure network connectivity**
+3. **Run the installation command**:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/debloper/piosk/main/scripts/setup.sh | sudo bash -
+curl -sSL https://raw.githubusercontent.com/KeithCarl/InfoPoint/main/scripts/setup.sh | sudo bash -
 ```
 
-That's it[^2].
+That's it! 🎉
 
-[^2]: For some reason, if that's **NOT** it, and you hit a snag... please report an issue & give us some context to replicate & debug it.
+## 🖥️ Usage
 
-## 1.3 Configuration
+1. **Access the Dashboard**
+   - Visit `http://<pi-ip-address>/` from any device on your network
+   - Or use `http://<hostname>.local/` if hostname is configured
 
-### 1.3.1 Basic
+2. **Configure URLs**
+   - Add URLs you want to display
+   - Set individual timeouts for each URL (in milliseconds)
+   - Assign display names for easier identification
+   - Configure global settings like default timeout and transition delays
 
-1. Visit `http://<pi's IP address>/`[^3] from a different device on the network
-2. You should see the PiOSK dashboard with a list of sample URLs as kiosk mode screens
-3. Feel free to add & remove links as necessary (at least 1 link is necessary for it to work)
-4. The URLs don't have to be of remote domains. You can use localhost or even `file:///path`
-5. Once you're happy with the list, press `APPLY ⏻` button to apply changes and reboot PiOSK
-6. When rebooted, wait for the kiosk mode to start & flip through the pages in fullscreen mode
+3. **Apply Configuration**
+   - Click "APPLY & RESTART ⏻" to save and restart kiosk mode
+   - The system will reboot into kiosk mode automatically
 
+4. **Kiosk Mode**
+   - URLs will cycle automatically with your configured timeouts
+   - Each page displays for its specified duration
+   - Smooth transitions between pages
 
-### 1.3.2 Advanced
+## ⚙️ Configuration Options
 
-> [!WARNING]  
-> Try these at your own risk; if you know what you're doing. Misconfiguration(s) may break the setup.
+### URL Settings
+- **URL**: The webpage to display
+- **Display Name**: Friendly name for identification
+- **Timeout**: How long to display this URL (milliseconds)
 
-1. The PiOSK repo is cloned to `/opt/piosk`
-2. You can change the dashboard port from `index.js`
-3. You can change the per-page timeout from `scripts/switcher.sh`
-4. You can change browser behavior (e.g. no full screen) from `scripts/runner.sh`
-5. Some changes can be applied without rebooting, but rebooting is simpler
+### Global Settings
+- **Default Timeout**: Default duration for new URLs (30000ms = 30 seconds)
+- **Transition Delay**: Pause between page changes (2000ms = 2 seconds)
 
-[^3]: PiOSK uses port 80 on the Pi to serve the web dashboard. If you're planning to use the Pi for other purposes, make sure to avoid port collision.
+### Example Configuration
+```json
+{
+  "urls": [
+    {
+      "url": "https://www.example.com/dashboard",
+      "name": "Company Dashboard",
+      "timeout": 60000
+    },
+    {
+      "url": "https://weather.com",
+      "name": "Weather",
+      "timeout": 15000
+    }
+  ],
+  "globalTimeout": 30000,
+  "transitionDelay": 2000
+}
+```
 
-![PiOSK Dashboard Web GUI](assets/dashboard.png)
+## 📁 File Structure
 
-## 1.4 Updating
+```
+/opt/infopoint/
+├── index.js              # Main dashboard application
+├── package.json          # Node.js dependencies
+├── scripts/
+│   ├── setup.sh          # Installation script
+│   ├── cleanup.sh        # Uninstallation script
+│   ├── switcher.sh       # URL switching logic
+│   └── runner.sh         # Kiosk mode runner
+├── config/
+│   ├── urls.json         # URL configuration
+│   └── urls.json.backup  # Configuration backup
+└── logs/
+    └── switcher.log      # Application logs
+```
 
-For now, there's no direct way to update the setup. This will change.
+## 🔧 Advanced Configuration
 
-You should uninstall old version and then reinstall the new version. As long as you don't delete the backup config file (created during uninstallation), it should be picked up and reinstated by the reinstallation process.
-
-Look into the Uninstallation section for the next steps.
-
-
-## 1.5 Uninstallation
-
-In order to uninstall/remove PiOSK from your system, run the `cleanup.sh` script:
-
+### Manual Configuration
+You can manually edit the configuration file:
 ```bash
-sudo /opt/piosk/scripts/cleanup.sh
+sudo nano /opt/infopoint/config/urls.json
 ```
 
-> [!NOTE]  
-> By default PiOSK doesn't uninstall the system packages it installs as dependencies (i.e. `git`, `jq`, `Node.js`, `wtype`). The reason being, if they're force removed, then other packages (which have been installed since) that may also rely on them - will break.
+### Service Management
+```bash
+# Check dashboard status
+sudo systemctl status infopoint
 
-# 2. Appendix
+# Check kiosk mode status
+sudo systemctl status infopoint-kiosk
 
-## 2.1 Assumptions
+# View logs
+sudo journalctl -u infopoint -f
+```
 
-0. You're using a Raspberry Pi (other SBCs may work, not tested)
-1. You're using "[Raspberry Pi OS with desktop (32bit)](https://www.raspberrypi.com/software/operating-systems/#raspberry-pi-os-32-bit)" (other distros may work, not tested)
-2. You've applied proper [OS customizations](https://www.raspberrypi.com/documentation/computers/getting-started.html#advanced-options) & the Pi is able to access the internet (required for setup)
-3. You're not using port 80 on the Pi to run some other web server (apart from PiOSK dashboard)
+### Customization
+- **Dashboard Port**: Edit `index.js` to change from port 80
+- **Browser Behavior**: Modify `scripts/runner.sh` for different display options
+- **Timeout Ranges**: Adjust validation in the dashboard code
 
-## 2.2 Recommendations
+## 🛠️ Troubleshooting
 
-- Choose the right device and OS
-  - If your Pi has 4GB or less memory, choose 32bit image
-  - Raspberry Pi Zeros struggle running Chromium due to low memory
-  - Raspberry Pi4 or Pi5 (or their compute modules) are ideal for PiOSK
-  - Apply the necessary customizations (user account, WiFi credentials, SSH access etc)
-- Choose the right display/screen
-  - Not related to PiOSK, but resolution matters for browser based kiosk mode
-    - Browser content window resolutions smaller than `1024px*600px` may not be ideal
-    - Different websites have different responsive rules & handle small screens differently
-  - Also be mindful of [LCD burn-in](https://en.wikipedia.org/wiki/Screen_burn-in) if displaying very limited number of static pages
-  - DSI displays are more discreet, but they may require driver setup to work properly
-- Take necessary steps to harden security
-    - Disable touchscreen unless required
-    - Disable ports that aren't required
-    - Disable unused network interfaces, remote SSH
-    - Enable OverlayFS to write protect storage
-- Discover the Pi on the network
-    - Set hostname (e.g. `piosk`) so you can call it by hostname without needing to hunt for IP
-    - The dashboard's URL with the hostname & IP address is shown at the end of the install script
-    - Or, run angry IP scanner or login to router/switch to discover the Pi's IP the hard way
+### Common Issues
+
+**Dashboard not accessible**
+- Check if port 80 is available: `sudo netstat -tlnp | grep :80`
+- Ensure InfoPoint service is running: `sudo systemctl status infopoint`
+
+**Kiosk mode not starting**
+- Check auto-login is enabled: `sudo raspi-config`
+- Verify X server is running: `echo $DISPLAY`
+- Check kiosk service: `sudo systemctl status infopoint-kiosk`
+
+**URLs not loading**
+- Verify internet connectivity: `ping google.com`
+- Check URL validity in dashboard
+- Review switcher logs: `tail -f /opt/infopoint/logs/switcher.log`
+
+### Log Files
+- **Dashboard logs**: `sudo journalctl -u infopoint`
+- **Kiosk logs**: `sudo journalctl -u infopoint-kiosk`
+- **Switcher logs**: `/opt/infopoint/logs/switcher.log`
+
+## 🔄 Updates
+
+### Updating InfoPoint
+Currently, you need to uninstall and reinstall:
+
+1. **Uninstall** (configuration will be backed up):
+```bash
+sudo /opt/infopoint/scripts/cleanup.sh
+```
+
+2. **Reinstall** (will restore backed up configuration):
+```bash
+curl -sSL https://raw.githubusercontent.com/KeithCarl/InfoPoint/main/scripts/setup.sh | sudo bash -
+```
+
+## 🗑️ Uninstallation
+
+To remove InfoPoint completely:
+```bash
+sudo /opt/infopoint/scripts/cleanup.sh
+```
+
+This will:
+- Stop all InfoPoint services
+- Remove application files
+- Backup your configuration
+- Restore original boot behavior
+- Clean up temporary files
+
+## 💡 Tips & Recommendations
+
+### Hardware
+- **Raspberry Pi 4/5**: Best performance for kiosk mode
+- **Raspberry Pi Zero**: May struggle with complex websites
+- **4GB+ RAM**: Recommended for smooth operation
+- **Quality SD Card**: Use Class 10 or better for reliability
+
+### Display
+- **Resolution**: 1024x600 minimum for good website compatibility
+- **HDMI**: More reliable than DSI displays
+- **Screen Burn-in**: Consider varied content to prevent LCD burn-in
+
+### Security
+- Change default passwords
+- Disable unused services
+- Use firewall rules if needed
+- Consider OverlayFS for SD card protection
+
+### Network
+- Use ethernet when possible for reliability
+- Configure static IP for easier access
+- Set up hostname for easier discovery
+
+## 📊 Performance Tips
+
+### Optimizing Display Times
+- **News sites**: 30-60 seconds
+- **Dashboards**: 60-120 seconds  
+- **Simple pages**: 15-30 seconds
+- **Complex pages**: 45-90 seconds
+
+### Memory Management
+- Limit number of URLs (recommended: 10-20)
+- Use transition delays to reduce memory pressure
+- Restart system daily if needed
+
+## 🤝 Contributing
+
+Feel free to submit issues and pull requests to improve InfoPoint!
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## 🙏 Acknowledgments
+
+- Original inspiration from the Raspberry Pi Foundation's kiosk mode tutorial
+- Built upon the excellent work of the PiOSK project
+- Thanks to the open-source community for tools and libraries
+
+---
+
+**InfoPoint** - Making digital signage simple and powerful! 🚀
